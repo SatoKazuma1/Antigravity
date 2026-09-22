@@ -19,12 +19,25 @@ const BEGIN: &str = "# AG_UNLOCKER_HOSTS_BEGIN";
 const END: &str = "# AG_UNLOCKER_HOSTS_END";
 
 pub fn hosts_path() -> PathBuf {
-    let root = env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
-    PathBuf::from(root)
-        .join("System32")
-        .join("drivers")
-        .join("etc")
-        .join("hosts")
+    #[cfg(target_os = "windows")]
+    {
+        let root = env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+        PathBuf::from(root)
+            .join("System32")
+            .join("drivers")
+            .join("etc")
+            .join("hosts")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        PathBuf::from("/etc/hosts")
+    }
+}
+
+pub fn is_applied() -> bool {
+    fs::read_to_string(hosts_path())
+        .map(|s| s.contains(BEGIN))
+        .unwrap_or(false)
 }
 
 fn render_block(entries: &[(String, Ipv4Addr)]) -> String {

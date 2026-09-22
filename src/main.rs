@@ -570,8 +570,9 @@ fn main() {
 
     if env::args().any(|a| a == background::PROXY_FLAG) {
         dns_forwarder::detach_console();
-        if let Err(e) = proxy::run(0) {
-            eprintln!("proxy: {}", e);
+        watchdog::start();
+        if let Err(e) = dns_forwarder::run_proxy_only() {
+            dns_forwarder::log_fatal(&e);
             std::process::exit(1);
         }
         return;
