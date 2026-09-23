@@ -15,9 +15,9 @@ use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection};
 use serde::{Deserialize, Serialize};
 
-pub const RELEASES_LATEST_URL: &str = "https://github.com/confeden/Antigravity/releases/latest";
+pub const RELEASES_LATEST_URL: &str = "https://github.com/SatoKazuma1/Antigravity/releases/latest";
 const API_HOST: &str = "api.github.com";
-const API_PATH: &str = "/repos/confeden/Antigravity/releases/latest";
+const API_PATH: &str = "/repos/SatoKazuma1/Antigravity/releases/latest";
 const CHECK_INTERVAL: Duration = Duration::from_secs(8 * 60 * 60);
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);

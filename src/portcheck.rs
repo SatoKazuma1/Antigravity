@@ -367,12 +367,20 @@ fn parse_excluded_ranges(text: &str) -> Vec<(u16, u16)> {
 #[cfg(not(windows))]
 fn listener_pid(addr: SocketAddr, proto: Proto) -> Option<u32> {
     let port = addr.port();
-    let file = match proto {
-        Proto::Tcp => "/proc/net/tcp",
-        Proto::Udp => "/proc/net/udp",
+    let files = match proto {
+        Proto::Tcp => ["/proc/net/tcp", "/proc/net/tcp6"],
+        Proto::Udp => ["/proc/net/udp", "/proc/net/udp6"],
     };
-    let content = std::fs::read_to_string(file).ok()?;
-    let target_inode = find_inode_for_port(&content, port)?;
+    let mut target_inode = None;
+    for file in files {
+        if let Ok(content) = std::fs::read_to_string(file) {
+            if let Some(inode) = find_inode_for_port(&content, port) {
+                target_inode = Some(inode);
+                break;
+            }
+        }
+    }
+    let target_inode = target_inode?;
 
     let entries = std::fs::read_dir("/proc").ok()?;
     let socket_str = format!("socket:[{}]", target_inode);

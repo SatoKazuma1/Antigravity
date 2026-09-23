@@ -1158,7 +1158,11 @@ mod tests {
     static STATEFUL: Mutex<()> = Mutex::new(());
 
     fn turn() -> std::sync::MutexGuard<'static, ()> {
-        STATEFUL.lock().unwrap_or_else(|e| e.into_inner())
+        let guard = STATEFUL.lock().unwrap_or_else(|e| e.into_inner());
+        if let Ok(mut list) = TUNNELS.lock() {
+            list.clear();
+        }
+        guard
     }
 
     fn blank() -> Snapshot {

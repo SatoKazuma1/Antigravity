@@ -110,28 +110,30 @@ pub fn detect() -> Option<Egress> {
         let flags = u32::from_str_radix(fields[3], 16).unwrap_or(0);
         let metric = fields[6].parse::<u32>().unwrap_or(0);
 
-        if dest == "00000000" && (flags & 0x2) != 0 && gateway != "00000000" {
-            let is_vpn = iface.starts_with("tun")
-                || iface.starts_with("tap")
-                || iface.starts_with("wg")
-                || iface.starts_with("ppp")
-                || iface.starts_with("tailscale")
-                || iface.starts_with("proton");
-            if is_vpn {
-                vpn_active = true;
-            } else {
-                let if_index = std::fs::read_to_string(format!("/sys/class/net/{}/ifindex", iface))
-                    .ok()
-                    .and_then(|s| s.trim().parse::<u32>().ok())
-                    .unwrap_or(0);
-                if if_index > 0 {
-                    match best_phys {
-                        None => best_phys = Some((if_index, metric)),
-                        Some((_, cur_metric)) if metric < cur_metric => {
-                            best_phys = Some((if_index, metric));
-                        }
-                        _ => {}
+        let is_vpn = iface.starts_with("tun")
+            || iface.starts_with("tap")
+            || iface.starts_with("wg")
+            || iface.starts_with("ppp")
+            || iface.starts_with("tailscale")
+            || iface.starts_with("proton")
+            || iface.starts_with("wireguard");
+
+        if is_vpn && (flags & 0x1) != 0 {
+            vpn_active = true;
+        }
+
+        if !is_vpn && dest == "00000000" && (flags & 0x2) != 0 && gateway != "00000000" {
+            let if_index = std::fs::read_to_string(format!("/sys/class/net/{}/ifindex", iface))
+                .ok()
+                .and_then(|s| s.trim().parse::<u32>().ok())
+                .unwrap_or(0);
+            if if_index > 0 {
+                match best_phys {
+                    None => best_phys = Some((if_index, metric)),
+                    Some((_, cur_metric)) if metric < cur_metric => {
+                        best_phys = Some((if_index, metric));
                     }
+                    _ => {}
                 }
             }
         }

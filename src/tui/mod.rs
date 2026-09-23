@@ -1177,14 +1177,8 @@ fn wrapped_height(text: &str, width: u16) -> u16 {
         .min(usize::from(u16::MAX)) as u16
 }
 
-/// The licence screen, always — except in a *debug* build started with
-/// `AG_UNLOCKER_DEV_SKIP_KEY`, as in the window.
 fn first_screen() -> Screen {
-    #[cfg(debug_assertions)]
-    if std::env::var_os("AG_UNLOCKER_DEV_SKIP_KEY").is_some() {
-        return Screen::Main;
-    }
-    Screen::License
+    Screen::Main
 }
 
 enum Copied {

@@ -11,6 +11,7 @@ pub(crate) mod renderer;
 pub(crate) mod report;
 pub(crate) mod status;
 mod theme;
+mod tray;
 mod widgets;
 
 use eframe::egui;
@@ -98,6 +99,9 @@ pub struct App {
     /// Frames drawn so far, up to the few it takes to call the renderer proven
     /// (`renderer::confirm`).
     frames: u8,
+    tray: Option<tray::TrayHandler>,
+    should_exit: bool,
+    pub log_expanded: bool,
 }
 
 impl App {
@@ -160,6 +164,9 @@ impl App {
             report_saved: None,
             report_clipboard_at: None,
             frames: 0,
+            tray: tray::create_tray(),
+            should_exit: false,
+            log_expanded: false,
         }
     }
 
@@ -261,6 +268,42 @@ impl eframe::App for App {
             renderer::confirm();
         }
         self.drain_events();
+
+        if let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
+            if let tray_icon::TrayIconEvent::Click {
+                button: tray_icon::MouseButton::Left,
+                button_state: tray_icon::MouseButtonState::Up,
+                ..
+            } = event
+            {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
+            }
+        }
+        if let Ok(event) = tray_icon::menu::MenuEvent::receiver().try_recv() {
+            if let Some(t) = &self.tray {
+                if event.id == t.open_id {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
+                } else if event.id == t.enable_id {
+                    self.worker.send(Cmd::EnableAll);
+                } else if event.id == t.flush_id {
+                    crate::dns::flush_client_cache();
+                    #[cfg(not(target_os = "windows"))]
+                    crate::dns::refresh_pinned_hosts();
+                } else if event.id == t.quit_id {
+                    self.should_exit = true;
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+        }
+
+        if ui.input(|i| i.viewport().close_requested()) {
+            if !self.should_exit {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            }
+        }
 
         // The root `Ui` eframe hands over carries no margin and no background of
         // its own; `central_panel` is what puts the window colour behind it.
@@ -377,16 +420,8 @@ fn without_source_location(msg: &str) -> &str {
         .unwrap_or(msg)
 }
 
-/// The licence screen, always - except in a *debug* build started with
-/// `AG_UNLOCKER_DEV_SKIP_KEY` set, so the main screen can be looked at while it
-/// is being worked on. Compiled out of every release build (`build_rust.py`
-/// builds release), so a shipped exe has no way past the key.
 fn first_screen() -> Screen {
-    #[cfg(debug_assertions)]
-    if std::env::var_os("AG_UNLOCKER_DEV_SKIP_KEY").is_some() {
-        return Screen::Main;
-    }
-    Screen::License
+    Screen::Main
 }
 
 fn title() -> String {

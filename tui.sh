@@ -8,7 +8,7 @@
 # той же командой скачивает заново, только если вышла новая версия. Без root.
 set -eu
 
-REPO="confeden/Antigravity"
+REPO="SatoKazuma1/Antigravity"
 DIR="${XDG_DATA_HOME:-$HOME/.local/share}/agunlocker"
 BIN="$DIR/ag_unlocker"
 

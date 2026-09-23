@@ -23,7 +23,7 @@
     [Net.ServicePointManager]::SecurityProtocol =
         [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-    $repo = 'confeden/Antigravity'
+    $repo = 'SatoKazuma1/Antigravity'
     $dir = Join-Path $env:LOCALAPPDATA 'AGUnlocker'
     $exe = Join-Path $dir 'AG.exe'
     $stamp = "$exe.version"
