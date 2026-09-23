@@ -180,6 +180,7 @@ dependencies = [
  "arboard",
  "eframe",
  "getrandom 0.2.17",
+ "gtk",
  "hex",
  "obfstr",
  "ratatui",
