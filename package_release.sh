@@ -14,38 +14,29 @@ cargo build --release
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"
 
-STAGE_COMPAT="$DIST_DIR/AG_${VERSION}_linux"
-STAGE_NAMED="$DIST_DIR/antigravity-unlocker-linux-x86_64"
+STAGE_DIR="$DIST_DIR/antigravity-unlocker-linux-x86_64"
+ARCHIVE_NAME="antigravity-unlocker-linux-x86_64.tar.gz"
 
-copy_payload() {
-    local target="$1"
-    mkdir -p "$target"
-    cp "$ROOT_DIR/target/release/ag_unlocker" "$target/ag_unlocker"
-    cp "$ROOT_DIR/linux/install.sh" "$target/install.sh"
-    if [ -f "$ROOT_DIR/linux/uninstall.sh" ]; then
-        cp "$ROOT_DIR/linux/uninstall.sh" "$target/uninstall.sh"
-    fi
-    cp "$ROOT_DIR/linux/launch.sh" "$target/launch.sh"
-    cp "$ROOT_DIR/linux/Antigravity-Unlocker.desktop" "$target/Antigravity-Unlocker.desktop"
-    cp "$ROOT_DIR/linux/README.md" "$target/README.md"
-    if [ -f "$ROOT_DIR/linux/icon.png" ]; then
-        cp "$ROOT_DIR/linux/icon.png" "$target/icon.png"
-    fi
-    chmod +x "$target/ag_unlocker" "$target/install.sh" "$target/launch.sh"
-    if [ -f "$target/uninstall.sh" ]; then
-        chmod +x "$target/uninstall.sh"
-    fi
-}
+echo "==> Preparing release payload..."
+mkdir -p "$STAGE_DIR"
+cp "$ROOT_DIR/target/release/ag_unlocker" "$STAGE_DIR/ag_unlocker"
+cp "$ROOT_DIR/linux/install.sh" "$STAGE_DIR/install.sh"
+if [ -f "$ROOT_DIR/linux/uninstall.sh" ]; then
+    cp "$ROOT_DIR/linux/uninstall.sh" "$STAGE_DIR/uninstall.sh"
+fi
+cp "$ROOT_DIR/linux/launch.sh" "$STAGE_DIR/launch.sh"
+cp "$ROOT_DIR/linux/Antigravity-Unlocker.desktop" "$STAGE_DIR/Antigravity-Unlocker.desktop"
+cp "$ROOT_DIR/linux/README.md" "$STAGE_DIR/README.md"
+if [ -f "$ROOT_DIR/linux/icon.png" ]; then
+    cp "$ROOT_DIR/linux/icon.png" "$STAGE_DIR/icon.png"
+fi
+chmod +x "$STAGE_DIR/ag_unlocker" "$STAGE_DIR/install.sh" "$STAGE_DIR/launch.sh"
+if [ -f "$STAGE_DIR/uninstall.sh" ]; then
+    chmod +x "$STAGE_DIR/uninstall.sh"
+fi
 
-echo "==> Preparing payloads..."
-copy_payload "$STAGE_COMPAT"
-copy_payload "$STAGE_NAMED"
-
-echo "==> Packaging AG_${VERSION}_linux.tar.gz (for tui.sh & direct installs)..."
-tar -czf "$DIST_DIR/AG_${VERSION}_linux.tar.gz" -C "$DIST_DIR" "AG_${VERSION}_linux"
-
-echo "==> Packaging antigravity-unlocker-linux-x86_64.tar.gz..."
-tar -czf "$DIST_DIR/antigravity-unlocker-linux-x86_64.tar.gz" -C "$DIST_DIR" "antigravity-unlocker-linux-x86_64"
+echo "==> Packaging $ARCHIVE_NAME..."
+tar -czf "$DIST_DIR/$ARCHIVE_NAME" -C "$DIST_DIR" "antigravity-unlocker-linux-x86_64"
 
 # Standalone binary
 cp "$ROOT_DIR/target/release/ag_unlocker" "$DIST_DIR/ag_unlocker"

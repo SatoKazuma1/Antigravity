@@ -43,9 +43,9 @@ case "$VER" in
             mkdir -p "$DIR"
             TMP=$(mktemp -d)
             trap 'rm -rf "$TMP"' EXIT
-            curl -fsSL "https://github.com/$REPO/releases/download/$TAG/AG_${VER}_linux.tar.gz" |
+            curl -fsSL "https://github.com/$REPO/releases/download/$TAG/antigravity-unlocker-linux-x86_64.tar.gz" |
                 tar xz -C "$TMP"
-            mv -f "$TMP/AG_${VER}_linux/ag_unlocker" "$BIN"
+            mv -f "$TMP/antigravity-unlocker-linux-x86_64/ag_unlocker" "$BIN"
             chmod +x "$BIN"
             echo "$VER" >"$BIN.version"
             rm -rf "$TMP"
