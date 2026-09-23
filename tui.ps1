@@ -45,7 +45,7 @@
     } elseif (-not (Test-Path $exe) -or (Get-Content $stamp -ErrorAction SilentlyContinue) -ne $ver) {
         Write-Host "Downloading Antigravity Unlocker $ver ..."
         New-Item -ItemType Directory -Force $dir | Out-Null
-        Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/$tag/AG_$ver.exe" -OutFile "$exe.part"
+        Invoke-WebRequest -UseBasicParsing "https://github.com/$repo/releases/download/$tag/ag_unlocker.exe" -OutFile "$exe.part"
         try {
             Move-Item -Force "$exe.part" $exe
             Set-Content -Path $stamp -Value $ver

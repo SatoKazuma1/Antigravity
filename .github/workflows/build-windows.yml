@@ -31,13 +31,10 @@ jobs:
       - name: Package Windows assets
         shell: bash
         run: |
-          TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || 'v2.16.0' }}"
-          VER="${TAG#v}"
           mkdir -p dist
-          cp target/release/ag_unlocker.exe "dist/AG_${VER}.exe"
           cp target/release/ag_unlocker.exe dist/ag_unlocker.exe
           cd dist
-          7z a "antigravity-unlocker-windows-x86_64.zip" "AG_${VER}.exe" ag_unlocker.exe ../icon.ico
+          7z a "antigravity-unlocker-windows-x86_64.zip" ag_unlocker.exe ../icon.ico
 
       - name: Upload Windows assets to release
         env:
@@ -45,9 +42,7 @@ jobs:
         shell: bash
         run: |
           TAG="${{ github.event.inputs.tag_name || github.event.release.tag_name || 'v2.16.0' }}"
-          VER="${TAG#v}"
           gh release upload "$TAG" \
-            "dist/AG_${VER}.exe" \
             dist/ag_unlocker.exe \
             dist/antigravity-unlocker-windows-x86_64.zip \
             --clobber
