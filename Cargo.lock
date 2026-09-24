@@ -182,6 +182,7 @@ dependencies = [
  "getrandom 0.2.17",
  "gtk",
  "hex",
+ "libc",
  "obfstr",
  "ratatui",
  "regex",

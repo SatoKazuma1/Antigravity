@@ -14,7 +14,31 @@ pub struct TrayHandler {
 }
 
 #[cfg(target_os = "linux")]
+fn is_appindicator_available() -> bool {
+    let candidates: &[&[u8]] = &[
+        b"libayatana-appindicator3.so.1\0",
+        b"libappindicator3.so.1\0",
+        b"libayatana-appindicator3.so\0",
+        b"libappindicator3.so\0",
+    ];
+    for name in candidates {
+        unsafe {
+            let handle = libc::dlopen(name.as_ptr() as *const libc::c_char, libc::RTLD_LAZY | libc::RTLD_LOCAL);
+            if !handle.is_null() {
+                libc::dlclose(handle);
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "linux")]
 pub fn create_tray() -> Option<TrayHandler> {
+    if !is_appindicator_available() {
+        return None;
+    }
+
     let icon = super::icon::tray_icon()?;
     let (tx, rx) = std::sync::mpsc::channel();
 
