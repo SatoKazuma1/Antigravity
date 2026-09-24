@@ -95,13 +95,63 @@ fn rewrite(block: Option<&str>) -> Result<(), String> {
     if updated == existing {
         return Ok(());
     }
-    fs::write(&path, updated).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::PermissionDenied {
-            "hosts: требуются права администратора".to_string()
-        } else {
-            format!("hosts: {}", e)
+    match fs::write(&path, &updated) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            #[cfg(not(target_os = "windows"))]
+            {
+                if elevate_write_hosts(&updated).is_ok() {
+                    return Ok(());
+                }
+            }
+            Err("hosts: требуются права администратора (или: sudo setfacl -m u:$USER:rw /etc/hosts)".to_string())
         }
-    })
+        Err(e) => Err(format!("hosts: {}", e)),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn elevate_write_hosts(content: &str) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    // 1. Try pkexec (Polkit graphical/terminal agent)
+    if let Ok(mut child) = Command::new("pkexec")
+        .args(["tee", "/etc/hosts"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(content.as_bytes());
+        }
+        if let Ok(status) = child.wait() {
+            if status.success() {
+                return Ok(());
+            }
+        }
+    }
+
+    // 2. Try sudo (if cached or in terminal)
+    if let Ok(mut child) = Command::new("sudo")
+        .args(["tee", "/etc/hosts"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(content.as_bytes());
+        }
+        if let Ok(status) = child.wait() {
+            if status.success() {
+                return Ok(());
+            }
+        }
+    }
+
+    Err("hosts: требуются права администратора".to_string())
 }
 
 pub fn write_entries(entries: &[(String, Ipv4Addr)]) -> Result<(), String> {
