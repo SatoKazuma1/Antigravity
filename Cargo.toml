@@ -34,6 +34,7 @@ socket2 = "0.6"
 # window). Only the crossterm backend - no widgets beyond the core set.
 ratatui = { version = "0.30", default-features = false, features = ["crossterm"] }
 tray-icon = { version = "0.25.1", default-features = false, features = ["libappindicator", "muda-gtk3"] }
+self-replace = "1.5.0"
 
 # The GUI. Immediate mode, pure Rust, one static exe with no runtime to install
 # (no WebView2, no GTK) - that is what makes it drop onto an arbitrary Windows
