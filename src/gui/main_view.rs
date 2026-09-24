@@ -20,7 +20,7 @@ use eframe::egui;
 use std::time::Duration;
 
 use super::status::{self, Action, Tone};
-use super::{theme, widgets, App, DONATE_URL, TELEGRAM_GROUP_URL};
+use super::{theme, widgets, App};
 use crate::ops::{Cap, Cmd, Level, State};
 use crate::utils::mask_path;
 
@@ -175,6 +175,7 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
                     .clicked()
                 {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                 }
                 if let Some((_, path)) = &saved {
                     if ui
@@ -913,40 +914,15 @@ fn footer(ui: &mut egui::Ui) {
         {
             crate::utils::open_url("https://github.com/SatoKazuma1/Antigravity");
         }
-        ui.label(
-            egui::RichText::new("Форк:")
-                .size(FOOTER_TEXT)
-                .color(theme::MUTED),
-        );
+        ui.add_space(4.0);
         ui.label(
             egui::RichText::new("|")
                 .size(FOOTER_TEXT)
                 .color(theme::LINE),
         );
-        if ui
-            .link(egui::RichText::new("t.me/nova_txt").size(FOOTER_TEXT))
-            .clicked()
-        {
-            crate::utils::open_url(TELEGRAM_GROUP_URL);
-        }
+        ui.add_space(4.0);
         ui.label(
-            egui::RichText::new("Оригинал:")
-                .size(FOOTER_TEXT)
-                .color(theme::MUTED),
-        );
-        ui.label(
-            egui::RichText::new("|")
-                .size(FOOTER_TEXT)
-                .color(theme::LINE),
-        );
-        if ui
-            .link(egui::RichText::new("nova-app.eu/donate").size(FOOTER_TEXT))
-            .clicked()
-        {
-            crate::utils::open_url(DONATE_URL);
-        }
-        ui.label(
-            egui::RichText::new("Отблагодарить копеечкой:")
+            egui::RichText::new("Antigravity Unlocker")
                 .size(FOOTER_TEXT)
                 .color(theme::MUTED),
         );

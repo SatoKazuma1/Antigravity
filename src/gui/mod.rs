@@ -22,9 +22,11 @@ use crate::ops::{self, Cmd, Event, Level, Status, Worker};
 use crate::settings::Settings;
 use crate::update::{self, ReleaseInfo};
 
+#[allow(dead_code)]
 pub const TELEGRAM_GROUP_URL: &str = "https://t.me/nova_txt";
 /// The room the free keys are pinned in (spec item 9), not the group root.
 pub const TELEGRAM_KEYS_URL: &str = "https://t.me/nova_txt/69864";
+#[allow(dead_code)]
 pub const DONATE_URL: &str = "https://nova-app.eu/donate";
 
 const WIN_W: f32 = 600.0;
@@ -277,6 +279,7 @@ impl eframe::App for App {
             } = event
             {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
             }
         }
@@ -284,6 +287,7 @@ impl eframe::App for App {
             if let Some(t) = &self.tray {
                 if event.id == t.open_id {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
                 } else if event.id == t.enable_id {
                     self.worker.send(Cmd::EnableAll);
@@ -302,6 +306,7 @@ impl eframe::App for App {
             if !self.should_exit {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
             }
         }
 
