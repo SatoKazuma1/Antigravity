@@ -667,6 +667,7 @@ impl App {
         rows.push(Row::Cap(Cap::ClientPatch));
         rows.push(Row::Bypass);
         rows.push(Row::Cap(Cap::Watchdog));
+        rows.push(Row::Cap(Cap::Autostart));
         let installs = self.status.as_ref().map_or(0, |s| s.installs.len());
         rows.extend((0..installs).map(Row::Install));
         rows.push(Row::Advanced);
@@ -736,7 +737,7 @@ impl App {
                     .as_ref()
                     .map(|s| s.get(cap).clone())
                     .unwrap_or(State::Off);
-                let indent = if matches!(cap, Cap::ClientPatch | Cap::Watchdog) {
+                let indent = if matches!(cap, Cap::ClientPatch | Cap::Watchdog | Cap::Autostart) {
                     ""
                 } else {
                     "  "

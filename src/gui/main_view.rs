@@ -378,6 +378,11 @@ fn antigravity_card(app: &mut App, ui: &mut egui::Ui) {
         ui.add_space(10.0);
         ui.separator();
         ui.add_space(8.0);
+        cap_row(app, ui, Cap::Autostart);
+
+        ui.add_space(10.0);
+        ui.separator();
+        ui.add_space(8.0);
         ui.label(
             egui::RichText::new("Найденные установки Antigravity")
                 .size(12.5)

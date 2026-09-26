@@ -204,9 +204,9 @@ impl App {
 
     /// The update banner, drawn on both screens with support for automatic download,
     /// progress reporting, error handling and one-click restart.
-    fn update_banner(&self, ui: &mut egui::Ui) {
-        let Some(msg) = &self.update else { return };
-        match msg {
+    fn update_banner(&mut self, ui: &mut egui::Ui) {
+        let Some(msg) = self.update.clone() else { return };
+        match &msg {
             update::UpdateMsg::Available(rel) => {
                 let v = rel.display_version();
                 let frame = egui::Frame::new()
@@ -306,7 +306,13 @@ impl App {
                             .fill(theme::OK);
 
                             if ui.add(btn).clicked() {
-                                let _ = update::restart_process();
+                                if let Err(e) = update::restart_process() {
+                                    self.log.push((Level::Err, format!("Ошибка перезапуска: {}", e)));
+                                    self.update = Some(update::UpdateMsg::Error {
+                                        version: version.clone(),
+                                        error: format!("Не удалось перезапустить: {}", e),
+                                    });
+                                }
                             }
                         });
                     });
@@ -523,14 +529,18 @@ impl eframe::App for App {
 /// to the next one in this process; a panic or a crash inside a driver moves to
 /// it on the next start (see `renderer`). Falling back costs nothing at runtime
 /// and is the difference between "it starts on other PCs" and a support thread.
-pub fn run() -> Result<(), String> {
-    fn options(kind: renderer::Kind) -> eframe::NativeOptions {
+pub fn run(start_minimized: bool) -> Result<(), String> {
+    let minimized = start_minimized && tray::is_supported();
+    fn options(kind: renderer::Kind, start_minimized: bool) -> eframe::NativeOptions {
         eframe::NativeOptions {
             viewport: {
                 let mut vp = egui::ViewportBuilder::default()
                     .with_inner_size([WIN_W, WIN_H])
                     .with_min_inner_size([520.0, 620.0])
                     .with_title(title());
+                if start_minimized {
+                    vp = vp.with_visible(false);
+                }
                 // The exe resource covers Explorer and the taskbar; this is what
                 // puts the same picture in the title bar and Alt-Tab.
                 if let Some(ico) = icon::window_icon() {
@@ -551,7 +561,7 @@ pub fn run() -> Result<(), String> {
         renderer::attempting(k);
         match eframe::run_native(
             &title(),
-            options(k),
+            options(k, minimized),
             Box::new(|cc| Ok(Box::new(App::new(cc)))),
         ) {
             Ok(()) => return Ok(()),

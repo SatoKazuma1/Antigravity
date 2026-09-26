@@ -19,6 +19,7 @@ use std::time::Duration;
 
 mod asar;
 mod auth;
+mod autostart;
 mod background;
 mod canary;
 mod dns;
@@ -543,6 +544,8 @@ pub fn install_label(install: &Path) -> &'static str {
 }
 
 fn main() {
+    update::record_initial_exe();
+
     if env::args().skip(1).any(|a| {
         matches!(
             a.trim_start_matches('-').to_ascii_lowercase().as_str(),
@@ -587,7 +590,10 @@ fn main() {
                     Ok(()) => {
                         println!("✓ Обновление успешно установлено!");
                         println!("Перезапуск...");
-                        let _ = update::restart_process();
+                        if let Err(e) = update::restart_process() {
+                            eprintln!("Ошибка перезапуска: {}", e);
+                            std::process::exit(1);
+                        }
                     }
                     Err(e) => {
                         eprintln!("Ошибка обновления: {}", e);
@@ -636,6 +642,8 @@ fn main() {
         return;
     }
 
+    let start_minimized = env::args().any(|a| a == "--minimized" || a == "--tray" || a == "-m");
+
     canary::handle_cli_flags();
 
     if tui::requested() {
@@ -649,7 +657,7 @@ fn main() {
         return;
     }
 
-    if let Err(e) = gui::run() {
+    if let Err(e) = gui::run(start_minimized) {
         // No renderer opened a window. The terminal UI carries every switch the
         // window does, so it is offered instead of a dead end: on Windows in a
         // console of its own, on Linux only when started from a terminal (a

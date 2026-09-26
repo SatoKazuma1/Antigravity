@@ -62,6 +62,8 @@ pub enum Cap {
     // stays in the file so an older build reading it still finds the field.
     /// Whether a substituted address must present a valid Google certificate.
     VerifyTls,
+    /// Whether the app launches at user login.
+    Autostart,
 }
 
 impl Cap {
@@ -82,6 +84,7 @@ impl Cap {
             Cap::BuiltinExits => "Встроенные выходы",
             Cap::DnsRotation => "Ротация DNS-серверов",
             Cap::VerifyTls => "Сверять TLS",
+            Cap::Autostart => "Автозапуск",
         }
     }
 }
@@ -193,6 +196,7 @@ pub struct Status {
     pub installs: Vec<InstallRow>,
     pub client_patch: State,
     pub watchdog: State,
+    pub autostart: State,
     pub dns: State,
     pub local_proxy: State,
     pub own_proxy: State,
@@ -235,6 +239,7 @@ impl Status {
             Cap::BuiltinExits => &self.builtin_exits,
             Cap::DnsRotation => &self.dns_rotation,
             Cap::VerifyTls => &self.verify_tls,
+            Cap::Autostart => &self.autostart,
         }
     }
 
@@ -703,7 +708,7 @@ fn scan_after(cap: Cap) -> Scan {
         Cap::Watchdog | Cap::Dns | Cap::LocalProxy | Cap::OwnProxy | Cap::DnsRotation => {
             Scan::System
         }
-        Cap::BuiltinExits | Cap::VerifyTls => Scan::Settings,
+        Cap::BuiltinExits | Cap::VerifyTls | Cap::Autostart => Scan::Settings,
     }
 }
 
@@ -778,6 +783,7 @@ impl Status {
     /// a switch that answers differently depending on which path drew it.
     fn with_settings_switches(mut self, s: &Settings) -> Self {
         self.builtin_exits = on_off(s.builtin_exits);
+        self.autostart = on_off(crate::autostart::is_enabled());
         self.verify_tls = if s.verify_tls {
             State::On
         } else {
@@ -872,6 +878,7 @@ fn read_status(ctx: &mut Ctx, deep: bool) -> Status {
         admin,
         client_patch,
         watchdog,
+        autostart: State::Off,
         dns: dns_state(
             admin,
             dns_probe.0,
@@ -1272,6 +1279,20 @@ fn apply(ctx: &mut Ctx, cap: Cap, on: bool) {
                     "Встроенные выходы отключены."
                 },
             );
+        }
+        (Cap::Autostart, on) => {
+            ctx.settings.autostart = on;
+            match crate::autostart::set_enabled(on) {
+                Ok(()) => ctx.log(
+                    Level::Ok,
+                    if on {
+                        "Автозапуск включён: программа будет запускаться при входе в систему (в трей)."
+                    } else {
+                        "Автозапуск отключён."
+                    },
+                ),
+                Err(e) => ctx.log(Level::Warn, format!("Автозапуск: {}", e)),
+            }
         }
     }
 }
@@ -2048,6 +2069,7 @@ mod tests {
     fn only_the_switches_that_touch_the_system_pay_for_a_system_scan() {
         assert_eq!(scan_after(Cap::VerifyTls), Scan::Settings);
         assert_eq!(scan_after(Cap::BuiltinExits), Scan::Settings);
+        assert_eq!(scan_after(Cap::Autostart), Scan::Settings);
         assert_eq!(scan_after(Cap::Dns), Scan::System);
         assert_eq!(scan_after(Cap::LocalProxy), Scan::System);
         assert_eq!(scan_after(Cap::ClientPatch), Scan::Deep);
@@ -2099,6 +2121,7 @@ mod tests {
             installs: Vec::new(),
             client_patch: State::Off,
             watchdog: State::Off,
+            autostart: State::Off,
             dns: State::Off,
             local_proxy: State::Off,
             own_proxy: State::Off,

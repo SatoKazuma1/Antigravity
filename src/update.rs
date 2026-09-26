@@ -624,10 +624,64 @@ pub fn perform_update(
     Ok(())
 }
 
-/// Restarts the application by spawning the updated executable and terminating current process.
+static INITIAL_EXE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Records the executable path at application start before any self-replacement can alter `/proc/self/exe`.
+pub fn record_initial_exe() {
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = INITIAL_EXE.set(exe);
+    }
+}
+
+/// Resolves the actual on-disk path of the current executable, properly handling
+/// Linux `/proc/self/exe` pointing to `... (deleted)` after self-replacement.
+pub fn current_executable_path() -> Result<PathBuf, String> {
+    if let Some(init) = INITIAL_EXE.get() {
+        if init.exists() {
+            return Ok(init.clone());
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        let s = exe.to_string_lossy();
+        if s.ends_with(" (deleted)") {
+            let clean = PathBuf::from(s.trim_end_matches(" (deleted)"));
+            if clean.exists() {
+                return Ok(clean);
+            }
+        } else if exe.exists() {
+            return Ok(exe);
+        }
+    }
+
+    if let Some(arg0) = std::env::args_os().next() {
+        let p = PathBuf::from(arg0);
+        if p.exists() {
+            return Ok(p);
+        }
+        if let Ok(abs) = std::env::current_dir().map(|d| d.join(&p)) {
+            if abs.exists() {
+                return Ok(abs);
+            }
+        }
+    }
+
+    let home = std::env::var("HOME").unwrap_or_default();
+    let installed_bin = PathBuf::from(&home).join(".local/share/agunlocker/ag_unlocker");
+    if installed_bin.exists() {
+        return Ok(installed_bin);
+    }
+    let alt_bin = PathBuf::from(&home).join(".local/bin/ag_unlocker");
+    if alt_bin.exists() {
+        return Ok(alt_bin);
+    }
+
+    Err("Не удалось определить путь к исполняемому файлу программы".to_string())
+}
+
+/// Restarts the application by spawning/execing the updated executable and terminating current process.
 pub fn restart_process() -> Result<(), String> {
-    let current_exe = std::env::current_exe()
-        .map_err(|e| format!("Не удалось определить путь к текущей программе: {}", e))?;
+    let current_exe = current_executable_path()?;
     let args: Vec<_> = std::env::args_os().skip(1).collect();
 
     let mut cmd = std::process::Command::new(&current_exe);
@@ -638,12 +692,22 @@ pub fn restart_process() -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
         cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
+        cmd.spawn()
+            .map_err(|e| format!("Не удалось перезапустить программу: {}", e))?;
+        std::process::exit(0);
     }
 
-    cmd.spawn()
-        .map_err(|e| format!("Не удалось перезапустить программу: {}", e))?;
-
-    std::process::exit(0);
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::process::CommandExt;
+        // First try exec: replaces the current process in place seamlessly
+        let err = cmd.exec();
+        // If exec returned, it failed. Try spawn fallback:
+        if cmd.spawn().is_ok() {
+            std::process::exit(0);
+        }
+        Err(format!("Не удалось перезапустить программу: {}", err))
+    }
 }
 
 /// Messages emitted by the update background worker.
@@ -894,5 +958,13 @@ mod tests {
         let meta = std::fs::metadata(&temp_file).unwrap();
         assert!(meta.len() > 10_000_000, "file too small: {}", meta.len());
         std::fs::remove_file(temp_file).ok();
+    }
+
+    #[test]
+    fn test_current_executable_path_resolves() {
+        let path = current_executable_path();
+        assert!(path.is_ok());
+        let p = path.unwrap();
+        assert!(!p.to_string_lossy().ends_with(" (deleted)"));
     }
 }

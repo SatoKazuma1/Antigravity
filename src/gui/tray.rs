@@ -13,6 +13,17 @@ pub struct TrayHandler {
     pub quit_id: MenuId,
 }
 
+pub fn is_supported() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        is_appindicator_available()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        true
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn is_appindicator_available() -> bool {
     let candidates: &[&[u8]] = &[

@@ -480,6 +480,7 @@ mod unix_impl {
     use super::PROXY_FLAG;
 
     const UNIT_NAME: &str = "ag-unlocker-proxy.service";
+    const AUTOSTART_NAME: &str = "ag_proxy.desktop";
 
     fn home() -> String {
         std::env::var("HOME").unwrap_or_default()
@@ -510,6 +511,20 @@ mod unix_impl {
             .join(UNIT_NAME)
     }
 
+    fn autostart_path() -> PathBuf {
+        xdg("XDG_CONFIG_HOME", ".config")
+            .join("autostart")
+            .join(AUTOSTART_NAME)
+    }
+
+    fn has_systemd() -> bool {
+        Command::new("systemctl")
+            .arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
+
     /// Runs `systemctl --user ...`; true on success. Best-effort: a machine
     /// without a user systemd manager (rare on a desktop) just fails the enable.
     fn systemctl(args: &[&str]) -> bool {
@@ -521,9 +536,44 @@ mod unix_impl {
             .unwrap_or(false)
     }
 
-    /// The unit file existing is what "enabled" means here.
+    fn find_proxy_pids() -> Vec<i32> {
+        let mut pids = Vec::new();
+        let current_pid = std::process::id() as i32;
+        let Ok(entries) = fs::read_dir("/proc") else {
+            return pids;
+        };
+        for entry in entries.flatten() {
+            let fname = entry.file_name();
+            let fname_str = fname.to_string_lossy();
+            if let Ok(pid) = fname_str.parse::<i32>() {
+                if pid == current_pid {
+                    continue;
+                }
+                let cmdline_path = entry.path().join("cmdline");
+                if let Ok(cmdline) = fs::read(&cmdline_path) {
+                    let has_flag = cmdline
+                        .split(|&b| b == 0)
+                        .any(|arg| arg == PROXY_FLAG.as_bytes());
+                    if has_flag {
+                        pids.push(pid);
+                    }
+                }
+            }
+        }
+        pids
+    }
+
+    fn stop_proxy_processes() {
+        for pid in find_proxy_pids() {
+            unsafe {
+                libc::kill(pid, libc::SIGTERM);
+            }
+        }
+    }
+
+    /// The unit file or autostart desktop entry existing is what "enabled" means here.
     pub fn is_enabled() -> bool {
-        unit_path().exists()
+        unit_path().exists() || autostart_path().exists()
     }
 
     /// Linux does not have a separate watchdog task or systemd unit: the proxy
@@ -535,11 +585,16 @@ mod unix_impl {
     }
 
     pub fn is_running() -> bool {
-        Command::new("systemctl")
-            .args(["--user", "is-active", "--quiet", UNIT_NAME])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        if has_systemd()
+            && Command::new("systemctl")
+                .args(["--user", "is-active", "--quiet", UNIT_NAME])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        {
+            return true;
+        }
+        !find_proxy_pids().is_empty()
     }
 
     pub fn relay_is_outdated() -> bool {
@@ -547,25 +602,18 @@ mod unix_impl {
             && crate::dns_forwarder::installed_version() < crate::dns_forwarder::RELAY_VERSION
     }
 
-    /// Installs the exe under the XDG data dir, writes a systemd **user** unit that
-    /// runs it with `--proxy`, and starts it. No root: `systemctl --user` targets
-    /// the caller's own session manager, which is why the whole Linux flow runs
-    /// unprivileged (and "Run as a Program" works without a password prompt).
+    /// Installs the exe under the XDG data dir and starts it:
+    /// - On systemd systems: writes a user unit and starts it via `systemctl --user`.
+    /// - On non-systemd systems (OpenRC, runit, dinit, etc.): writes an XDG autostart
+    ///   entry for login and spawns the process detached directly.
+    ///
+    /// Unprivileged in both cases: no root required.
     pub fn ensure_running() -> Result<(), String> {
         let src = std::env::current_exe().map_err(|e| format!("нет пути к exe: {}", e))?;
         let dir = install_dir();
         let exe = installed_exe();
         fs::create_dir_all(&dir).map_err(|e| format!("не создать {}: {}", dir.display(), e))?;
-        // Copy self so the unit survives the download folder being moved/removed.
-        //
-        // Never *over* the installed copy: Linux will not open a file a process
-        // is executing for writing - ETXTBSY, «Text file busy (os error 26)» -
-        // and that is exactly the state every upgrade finds, the previous
-        // version's unit being up. A new file beside it renamed over the name is
-        // allowed: the running process keeps the old inode, the name now points at
-        // the new one, and the restart below starts it. Skipped when the bytes are
-        // already the same, so switching the bypass on again does not cut the
-        // tunnels a running proxy is carrying.
+
         let replaced = src != exe && !same_contents(&src, &exe);
         if replaced {
             use std::os::unix::fs::PermissionsExt;
@@ -578,38 +626,69 @@ mod unix_impl {
             })?;
         }
 
-        let up = unit_path();
-        if let Some(p) = up.parent() {
-            fs::create_dir_all(p).map_err(|e| format!("не создать {}: {}", p.display(), e))?;
-        }
-        let unit = format!(
-            "[Unit]\n\
-             Description=Antigravity Unlocker local proxy\n\
-             After=network-online.target\n\n\
-             [Service]\n\
-             ExecStart={exe} {flag}\n\
-             Restart=on-failure\n\
-             RestartSec=5\n\n\
-             [Install]\n\
-             WantedBy=default.target\n",
-            exe = exe.display(),
-            flag = PROXY_FLAG,
-        );
-        fs::write(&up, unit).map_err(|e| format!("не записать юнит: {}", e))?;
-
         crate::dns_forwarder::record_version();
 
-        systemctl(&["daemon-reload"]);
-        if !systemctl(&["enable", "--now", UNIT_NAME]) {
-            return Err("не удалось запустить systemd-юнит (systemctl --user)".to_string());
-        }
-        // `enable --now` leaves a unit that is already running alone, so a copy
-        // just replaced would sit unused until the next login.
-        if replaced && !systemctl(&["restart", UNIT_NAME]) {
-            return Err(
-                "новая версия прокси записана, но служба не перезапустилась (systemctl --user)"
-                    .to_string(),
+        if has_systemd() {
+            let up = unit_path();
+            if let Some(p) = up.parent() {
+                fs::create_dir_all(p).map_err(|e| format!("не создать {}: {}", p.display(), e))?;
+            }
+            let unit = format!(
+                "[Unit]\n\
+                 Description=Antigravity Unlocker local proxy\n\
+                 After=network-online.target\n\n\
+                 [Service]\n\
+                 ExecStart={exe} {flag}\n\
+                 Restart=on-failure\n\
+                 RestartSec=5\n\n\
+                 [Install]\n\
+                 WantedBy=default.target\n",
+                exe = exe.display(),
+                flag = PROXY_FLAG,
             );
+            fs::write(&up, unit).map_err(|e| format!("не записать юнит: {}", e))?;
+
+            systemctl(&["daemon-reload"]);
+            if !systemctl(&["enable", "--now", UNIT_NAME]) {
+                return Err("не удалось запустить systemd-юнит (systemctl --user)".to_string());
+            }
+            if replaced && !systemctl(&["restart", UNIT_NAME]) {
+                return Err(
+                    "новая версия прокси записана, но служба не перезапустилась (systemctl --user)"
+                        .to_string(),
+                );
+            }
+        } else {
+            let ap = autostart_path();
+            if let Some(p) = ap.parent() {
+                fs::create_dir_all(p).map_err(|e| format!("не создать {}: {}", p.display(), e))?;
+            }
+            let desktop = format!(
+                "[Desktop Entry]\n\
+                 Type=Application\n\
+                 Name=Antigravity Unlocker Proxy\n\
+                 Exec=\"{}\" {}\n\
+                 Terminal=false\n\
+                 Hidden=false\n\
+                 X-GNOME-Autostart-enabled=true\n",
+                exe.display(),
+                PROXY_FLAG,
+            );
+            fs::write(&ap, desktop).map_err(|e| format!("не записать автозапуск: {}", e))?;
+
+            if replaced || find_proxy_pids().is_empty() {
+                if replaced {
+                    stop_proxy_processes();
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+                std::process::Command::new(&exe)
+                    .arg(PROXY_FLAG)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn()
+                    .map_err(|e| format!("не удалось запустить процесс прокси: {}", e))?;
+            }
         }
         Ok(())
     }
@@ -639,12 +718,15 @@ mod unix_impl {
 
     pub fn disable_watchdog() {}
 
-    /// Stops and removes the user unit and the installed copy. Quiet success even
-    /// when nothing was installed, so the undo menus never error.
+    /// Stops and removes the user unit, autostart desktop entry, and the installed copy.
     pub fn disable() -> Result<(), String> {
-        systemctl(&["disable", "--now", UNIT_NAME]);
-        let _ = fs::remove_file(unit_path());
-        systemctl(&["daemon-reload"]);
+        if has_systemd() {
+            systemctl(&["disable", "--now", UNIT_NAME]);
+            let _ = fs::remove_file(unit_path());
+            systemctl(&["daemon-reload"]);
+        }
+        stop_proxy_processes();
+        let _ = fs::remove_file(autostart_path());
         let _ = fs::remove_file(installed_exe());
         let _ = fs::remove_file(crate::dns_forwarder::log_path());
         let _ = fs::remove_file(crate::dns_forwarder::version_path());
