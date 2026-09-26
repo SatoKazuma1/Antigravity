@@ -169,13 +169,23 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
                 {
                     copy = true;
                 }
+                let has_tray = app.tray.is_some();
+                let tray_hover = if has_tray {
+                    "Скрыть окно в системный трей (обход продолжит работать в фоне)"
+                } else {
+                    "Системный трей недоступен (окно будет свёрнуто)"
+                };
                 if ui
                     .add(egui::Button::new(egui::RichText::new("Свернуть в трей").size(12.5)))
-                    .on_hover_text("Скрыть окно в системный трей (обход продолжит работать в фоне)")
+                    .on_hover_text(tray_hover)
                     .clicked()
                 {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                    if has_tray {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                    } else {
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+                    }
                 }
                 if let Some((_, path)) = &saved {
                     if ui
@@ -390,8 +400,12 @@ fn bypass_master(app: &mut App, ui: &mut egui::Ui) {
         widgets::hint(ui, hint);
     });
     if flipped {
-        for cap in crate::ops::bypass_order(master) {
-            app.worker.send(Cmd::Set(cap, master));
+        if master {
+            app.worker.send(Cmd::EnableAll);
+        } else {
+            for cap in crate::ops::bypass_order(false) {
+                app.worker.send(Cmd::Set(cap, false));
+            }
         }
     }
 }

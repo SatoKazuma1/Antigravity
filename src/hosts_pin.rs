@@ -112,46 +112,55 @@ fn rewrite(block: Option<&str>) -> Result<(), String> {
 
 #[cfg(not(target_os = "windows"))]
 fn elevate_write_hosts(content: &str) -> Result<(), String> {
+    use std::io::IsTerminal;
     use std::io::Write;
     use std::process::{Command, Stdio};
 
-    // 1. Try pkexec (Polkit graphical/terminal agent)
-    if let Ok(mut child) = Command::new("pkexec")
-        .args(["tee", "/etc/hosts"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(content.as_bytes());
-        }
-        if let Ok(status) = child.wait() {
-            if status.success() {
-                return Ok(());
+    // Temporarily pause terminal raw mode if active so password prompts (sudo, run0, pkttyagent)
+    // can interact with the user cleanly on /dev/tty
+    let is_term = std::io::stdin().is_terminal();
+    if is_term {
+        let _ = ratatui::crossterm::terminal::disable_raw_mode();
+    }
+
+    // Supported elevation tools on Linux in order of preference
+    let candidates = [
+        "pkexec",
+        "run0",
+        "sudo",
+        "doas",
+    ];
+
+    let mut succeeded = false;
+    for prog in candidates {
+        let mut cmd = Command::new(prog);
+        cmd.args(["tee", "/etc/hosts"]);
+        cmd.stdin(Stdio::piped());
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::piped());
+
+        if let Ok(mut child) = cmd.spawn() {
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(content.as_bytes());
+            }
+            if let Ok(status) = child.wait() {
+                if status.success() {
+                    succeeded = true;
+                    break;
+                }
             }
         }
     }
 
-    // 2. Try sudo (if cached or in terminal)
-    if let Ok(mut child) = Command::new("sudo")
-        .args(["tee", "/etc/hosts"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-    {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(content.as_bytes());
-        }
-        if let Ok(status) = child.wait() {
-            if status.success() {
-                return Ok(());
-            }
-        }
+    if is_term {
+        let _ = ratatui::crossterm::terminal::enable_raw_mode();
     }
 
-    Err("hosts: требуются права администратора".to_string())
+    if succeeded {
+        return Ok(());
+    }
+
+    Err("hosts: требуются права администратора (или: run0 setfacl -m u:$USER:rw /etc/hosts / sudo setfacl -m u:$USER:rw /etc/hosts)".to_string())
 }
 
 pub fn write_entries(entries: &[(String, Ipv4Addr)]) -> Result<(), String> {

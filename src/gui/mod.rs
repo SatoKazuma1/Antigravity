@@ -103,6 +103,8 @@ pub struct App {
     /// (`renderer::confirm`).
     frames: u8,
     tray: Option<tray::TrayHandler>,
+    tray_rx: Receiver<tray_icon::TrayIconEvent>,
+    menu_rx: Receiver<tray_icon::menu::MenuEvent>,
     should_exit: bool,
     pub log_expanded: bool,
 }
@@ -143,6 +145,22 @@ impl App {
         if matches!(screen, Screen::Main) {
             worker.send(Cmd::Unlocked);
         }
+
+        let (tray_tx, tray_rx) = channel();
+        let (menu_tx, menu_rx) = channel();
+
+        let tray_wake_ctx = cc.egui_ctx.clone();
+        tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+            let _ = tray_tx.send(event);
+            tray_wake_ctx.request_repaint();
+        }));
+
+        let menu_wake_ctx = cc.egui_ctx.clone();
+        tray_icon::menu::MenuEvent::set_event_handler(Some(move |event| {
+            let _ = menu_tx.send(event);
+            menu_wake_ctx.request_repaint();
+        }));
+
         Self {
             screen,
             key_input: String::new(),
@@ -173,6 +191,8 @@ impl App {
             report_clipboard_at: None,
             frames: 0,
             tray: tray::create_tray(),
+            tray_rx,
+            menu_rx,
             should_exit: false,
             log_expanded: false,
         }
@@ -413,7 +433,7 @@ impl eframe::App for App {
         }
         self.drain_events();
 
-        if let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
+        while let Ok(event) = self.tray_rx.try_recv() {
             if let tray_icon::TrayIconEvent::Click {
                 button: tray_icon::MouseButton::Left,
                 button_state: tray_icon::MouseButtonState::Up,
@@ -425,7 +445,7 @@ impl eframe::App for App {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Focus);
             }
         }
-        if let Ok(event) = tray_icon::menu::MenuEvent::receiver().try_recv() {
+        while let Ok(event) = self.menu_rx.try_recv() {
             if let Some(t) = &self.tray {
                 if event.id == t.open_id {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(true));
@@ -445,7 +465,7 @@ impl eframe::App for App {
         }
 
         if ui.input(|i| i.viewport().close_requested()) {
-            if !self.should_exit {
+            if self.tray.is_some() && !self.should_exit {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));

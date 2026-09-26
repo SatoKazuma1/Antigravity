@@ -1,7 +1,7 @@
 #!/bin/sh
 # Antigravity Unlocker — терминальный режим одной командой (Linux x86-64):
 #
-#   curl -fsSL https://raw.githubusercontent.com/confeden/Antigravity/main/tui.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/SatoKazuma1/Antigravity/main/tui.sh | sh
 #
 # Берёт последний релиз с GitHub, кладёт программу в
 # ~/.local/share/agunlocker/ и запускает её в этом терминале. Повторный запуск
@@ -53,6 +53,9 @@ case "$VER" in
         fi
         ;;
 esac
+
+mkdir -p "${HOME}/.local/bin"
+ln -sf "$BIN" "${HOME}/.local/bin/ag_unlocker"
 
 # `curl … | sh` hands this script to sh on stdin; the program's keys come from
 # the terminal itself.

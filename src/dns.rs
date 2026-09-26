@@ -533,8 +533,6 @@ const HELPER_LIMIT: Duration = Duration::from_secs(15);
 
 #[cfg(not(target_os = "windows"))]
 pub fn setup_dns_nrpt() -> Result<DnsOutcome, String> {
-    remove_dns_nrpt();
-
     let egress = egress::detect();
     let via_relay = background::is_enabled();
     let (_, client) = egress::vpn_verdict(egress.as_ref());
@@ -552,6 +550,7 @@ pub fn setup_dns_nrpt() -> Result<DnsOutcome, String> {
     invalidate_cache();
 
     if pinned.is_empty() {
+        remove_dns_nrpt();
         if let Some(err) = pin_error.as_ref() {
             return Err(format!("Не удалось применить DNS-обход (/etc/hosts): {}", err));
         }

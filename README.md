@@ -30,7 +30,27 @@
 
 ---
 
-## 📦 Скачивание и установка
+### 🚀 Быстрая установка в один клик
+
+**Linux (GUI + ярлык в меню приложений)**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/SatoKazuma1/Antigravity/main/install.sh | sh
+```
+*Скрипт скачает актуальную версию, создаст ярлык в меню приложений GNOME/KDE/Sway/Niri, добавит команду `ag_unlocker` в `~/.local/bin` и откроет графический интерфейс.*
+
+**Linux (Терминальный режим TUI — для серверов по SSH / без монитора)**:
+```bash
+curl -fsSL https://raw.githubusercontent.com/SatoKazuma1/Antigravity/main/tui.sh | sh
+```
+
+**Windows (PowerShell)**:
+```powershell
+irm https://raw.githubusercontent.com/SatoKazuma1/Antigravity/main/tui.ps1 | iex
+```
+
+---
+
+## 📦 Ручная установка
 
 Скачайте последнюю версию со страницы [Releases](https://github.com/SatoKazuma1/Antigravity/releases).
 
@@ -49,29 +69,13 @@
    ```bash
    bash launch.sh
    ```
-   *(Программа запускается от обычного пользователя, sudo не требуется).*
+   *(Программа запускается от обычного пользователя, sudo не требуется. Для DNS-записей в `/etc/hosts` поддерживаются `run0`, `pkexec`, `sudo` и `doas`).*
 
 ### Windows
 
 1. Скачайте `ag_unlocker.exe`.
 2. Запустите файл (рекомендуется от имени администратора для настройки DNS-политик NRPT).
 3. Нажмите **«Включить всё»**.
-
----
-
-## 💻 Терминальный режим (TUI) одной командой
-
-Для серверов по SSH или систем без графической оболочки:
-
-**Linux**:
-```bash
-curl -fsSL https://raw.githubusercontent.com/SatoKazuma1/Antigravity/main/tui.sh | sh
-```
-
-**Windows (PowerShell)**:
-```powershell
-irm https://raw.githubusercontent.com/SatoKazuma1/Antigravity/main/tui.ps1 | iex
-```
 
 ---
 
