@@ -340,6 +340,10 @@ fn targets_card(app: &mut App, ui: &mut egui::Ui) {
             ("daily-cloudcode-pa.googleapis.com", "Daily Staging Gate"),
             ("generativelanguage.googleapis.com", "Gemini API"),
             ("aistudio.google.com", "Google AI Studio"),
+            ("alkalimakersuite-pa.clients6.google.com", "AI Studio Backend API"),
+            ("webchannel-alkalimakersuite-pa.clients6.google.com", "AI Studio WebChannel"),
+            ("fonts.gstatic.com", "Google Fonts / Material Icons CDN"),
+            ("fonts.googleapis.com", "Google Fonts API"),
         ];
 
         for (host, desc) in targets {

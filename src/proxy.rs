@@ -407,6 +407,8 @@ pub fn is_gate_host(host: &str) -> bool {
         || h == "daily-cloudcode-pa.googleapis.com"
         || h == "generativelanguage.googleapis.com"
         || h == "aistudio.google.com"
+        || h == "alkalimakersuite-pa.clients6.google.com"
+        || h == "webchannel-alkalimakersuite-pa.clients6.google.com"
 }
 
 /// Sends a gate host through the user's own proxy, when they gave us one and it

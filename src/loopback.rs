@@ -33,7 +33,7 @@ use std::time::Duration;
 
 /// One loopback address per gate host. `127.65.71.x` - "A", "G" - to stay clear
 /// of `127.0.0.1` and of the relay's own `127.0.0.53`.
-pub const HOSTS: [(&str, Ipv4Addr); 4] = [
+pub const HOSTS: [(&str, Ipv4Addr); 6] = [
     ("cloudcode-pa.googleapis.com", Ipv4Addr::new(127, 65, 71, 1)),
     (
         "daily-cloudcode-pa.googleapis.com",
@@ -44,6 +44,14 @@ pub const HOSTS: [(&str, Ipv4Addr); 4] = [
         Ipv4Addr::new(127, 65, 71, 3),
     ),
     ("aistudio.google.com", Ipv4Addr::new(127, 65, 71, 4)),
+    (
+        "alkalimakersuite-pa.clients6.google.com",
+        Ipv4Addr::new(127, 65, 71, 5),
+    ),
+    (
+        "webchannel-alkalimakersuite-pa.clients6.google.com",
+        Ipv4Addr::new(127, 65, 71, 6),
+    ),
 ];
 
 const PORT: u16 = 443;

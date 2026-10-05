@@ -57,6 +57,10 @@ const AG_NRPT_CORE: &[&str] = &[
     "daily-cloudcode-pa.googleapis.com",
     "generativelanguage.googleapis.com",
     "aistudio.google.com",
+    "alkalimakersuite-pa.clients6.google.com",
+    "webchannel-alkalimakersuite-pa.clients6.google.com",
+    "fonts.gstatic.com",
+    "fonts.googleapis.com",
 ];
 
 /// The names an NRPT rule always points at the relay - and therefore the ones
@@ -489,6 +493,16 @@ fn parse_conflicts(output: &str, namespaces: &[&str]) -> Vec<String> {
 fn pin_substituted_hosts(namespaces: &[&str], if_index: u32) -> Result<Vec<String>, String> {
     let mut entries = Vec::new();
     for ns in namespaces {
+        if *ns == "fonts.gstatic.com" || *ns == "fonts.googleapis.com" {
+            let addrs = resolvers::genuine_a(ns);
+            let ip = addrs.first().copied().unwrap_or_else(|| match *ns {
+                "fonts.gstatic.com" => std::net::Ipv4Addr::new(142, 250, 120, 94),
+                "fonts.googleapis.com" => std::net::Ipv4Addr::new(142, 251, 98, 95),
+                _ => std::net::Ipv4Addr::new(142, 250, 120, 94),
+            });
+            entries.push((ns.to_string(), ip));
+            continue;
+        }
         let Some((addrs, _, verdict)) = resolvers::resolve_a_best(ns, if_index) else {
             continue;
         };
@@ -1023,6 +1037,33 @@ mod tests {
     /// as startup does. Needs admin, a live network and the rules already in
     /// place. Deliberately leaves the block behind - that is the working state.
     #[test]
+    #[ignore = "needs a live network; run with --ignored"]
+    fn test_resolve_nrpt_core() {
+        let egress = egress::detect();
+        let probe_if = egress.as_ref().map(|e| e.if_index).unwrap_or(0);
+        let domains = [
+            "cloudcode-pa.googleapis.com",
+            "daily-cloudcode-pa.googleapis.com",
+            "generativelanguage.googleapis.com",
+            "aistudio.google.com",
+            "alkalimakersuite-pa.clients6.google.com",
+            "webchannel-alkalimakersuite-pa.clients6.google.com",
+            "alkalimakersuiteapplets.pa.clients6.google.com",
+            "cloudconsole-pa.clients6.google.com",
+            "people-pa.clients6.google.com",
+            "content.googleapis.com",
+            "fonts.gstatic.com",
+            "fonts.googleapis.com",
+            "www.gstatic.com",
+        ];
+        for ns in domains {
+            let res = resolvers::resolve_a_best(ns, probe_if);
+            let gen = resolvers::genuine_a(ns);
+            println!("{}: best={:?} genuine={:?}", ns, res, gen);
+        }
+    }
+
+    #[test]
     #[ignore = "writes the real hosts file; run with --ignored"]
     fn pins_the_real_hosts_file() {
         let path = hosts_pin::hosts_path();
@@ -1038,7 +1079,12 @@ mod tests {
             eg.as_ref().map(|e| e.vpn_active)
         );
         if let Some(eg) = &eg {
-            let server: Ipv4Addr = resolvers::PROVIDERS[0].v4[0].parse().unwrap();
+            let server: Ipv4Addr = resolvers::fallback_v4()
+                .first()
+                .copied()
+                .unwrap_or("83.220.169.155")
+                .parse()
+                .unwrap();
             for ns in AG_NRPT_CORE {
                 println!(
                     "  {}\n    isp={:?}\n    tun={:?}\n    best={:?}",
@@ -1057,7 +1103,18 @@ mod tests {
         println!("--- after ---\n{}\n-------------", after);
 
         // Whatever else lived in the file has to survive untouched.
+        let mut inside_block = false;
         for line in before.lines().filter(|l| !l.trim().is_empty()) {
+            if line.contains("AG_UNLOCKER_HOSTS_BEGIN") {
+                inside_block = true;
+                continue;
+            }
+            if inside_block {
+                if line.contains("AG_UNLOCKER_HOSTS_END") {
+                    inside_block = false;
+                }
+                continue;
+            }
             assert!(
                 after.contains(line),
                 "hosts lost a pre-existing line: {}",
@@ -1068,11 +1125,15 @@ mod tests {
         // The outcome differs by design, so assert the right one instead of
         // passing silently either way.
         let pinned = after.contains("AG_UNLOCKER_HOSTS_BEGIN");
-        if eg.map_or(false, |e| e.vpn_active) {
-            assert!(pinned, "a tunnel is up but nothing was pinned");
+        if cfg!(target_os = "windows") {
+            if eg.map_or(false, |e| e.vpn_active) {
+                assert!(pinned, "a tunnel is up but nothing was pinned");
+            } else {
+                assert!(!pinned, "no tunnel, so the block should not be there");
+                println!("(без VPN пиннинг не нужен — правила NRPT справляются сами)");
+            }
         } else {
-            assert!(!pinned, "no tunnel, so the block should not be there");
-            println!("(без VPN пиннинг не нужен — правила NRPT справляются сами)");
+            assert!(pinned, "hosts block should be present on Linux");
         }
     }
 }
