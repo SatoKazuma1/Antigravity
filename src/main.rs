@@ -43,6 +43,8 @@ mod proxy;
 mod resolvers;
 mod routes;
 mod settings;
+#[cfg(target_os = "linux")]
+mod supervisor;
 mod tui;
 mod update;
 mod upstream;
@@ -657,7 +659,28 @@ fn main() {
         return;
     }
 
-    if let Err(e) = gui::run(start_minimized) {
+    // Linux: the window is its own process, and what stays resident is the tray
+    // (`supervisor`). Where there is no tray to be resident in, or the
+    // supervisor cannot start, the window runs in this process as it always did.
+    #[cfg(target_os = "linux")]
+    let window_only = env::args().any(|a| a == gui::CHILD_FLAG);
+    #[cfg(not(target_os = "linux"))]
+    let window_only = false;
+    #[cfg(target_os = "linux")]
+    {
+        if window_only {
+            gui::mark_supervised();
+        } else if gui::tray::is_supported() {
+            match supervisor::run(!start_minimized) {
+                supervisor::Outcome::Done => return,
+                supervisor::Outcome::Unavailable(why) => {
+                    eprintln!("ag_unlocker: резидентный режим недоступен ({why})");
+                }
+            }
+        }
+    }
+
+    if let Err(e) = gui::run(start_minimized && !window_only) {
         // No renderer opened a window. The terminal UI carries every switch the
         // window does, so it is offered instead of a dead end: on Windows in a
         // console of its own, on Linux only when started from a terminal (a

@@ -11,7 +11,7 @@ pub(crate) mod renderer;
 pub(crate) mod report;
 pub(crate) mod status;
 mod theme;
-mod tray;
+pub(crate) mod tray;
 mod widgets;
 
 use eframe::egui;
@@ -28,6 +28,25 @@ pub const TELEGRAM_GROUP_URL: &str = "https://t.me/nova_txt";
 pub const TELEGRAM_KEYS_URL: &str = "https://t.me/nova_txt/69864";
 #[allow(dead_code)]
 pub const DONATE_URL: &str = "https://nova-app.eu/donate";
+
+/// The flag the resident process starts the window with (Linux, `supervisor`).
+///
+/// A window started with it is a process of its own that lives exactly as long
+/// as the window does: closing it ends the process, which is what hands the
+/// GPU context back (a window that is only hidden keeps the whole renderer —
+/// hundreds of MB of video memory — for as long as the tray icon lives).
+#[allow(dead_code)]
+pub const CHILD_FLAG: &str = "--gui-window";
+
+/// Set before `run` when this process is such a window. Read once, in
+/// `App::new`: it decides who owns the tray (not us) and whether closing the
+/// window means closing.
+static SUPERVISED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[allow(dead_code)]
+pub fn mark_supervised() {
+    SUPERVISED.store(true, std::sync::atomic::Ordering::SeqCst);
+}
 
 const WIN_W: f32 = 600.0;
 const WIN_H: f32 = 840.0;
@@ -106,6 +125,9 @@ pub struct App {
     tray_rx: Receiver<tray_icon::TrayIconEvent>,
     menu_rx: Receiver<tray_icon::menu::MenuEvent>,
     should_exit: bool,
+    /// This window is a child of the resident process (`CHILD_FLAG`): no tray of
+    /// its own, and closing it really closes it.
+    supervised: bool,
     pub log_expanded: bool,
 }
 
@@ -146,20 +168,27 @@ impl App {
             worker.send(Cmd::Unlocked);
         }
 
+        let supervised = SUPERVISED.load(std::sync::atomic::Ordering::SeqCst);
         let (tray_tx, tray_rx) = channel();
         let (menu_tx, menu_rx) = channel();
 
-        let tray_wake_ctx = cc.egui_ctx.clone();
-        tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
-            let _ = tray_tx.send(event);
-            tray_wake_ctx.request_repaint();
-        }));
+        // The tray belongs to the resident process when there is one; a second
+        // icon here would be a duplicate that dies with the window.
+        if supervised {
+            watch_parent(cc.egui_ctx.clone());
+        } else {
+            let tray_wake_ctx = cc.egui_ctx.clone();
+            tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+                let _ = tray_tx.send(event);
+                tray_wake_ctx.request_repaint();
+            }));
 
-        let menu_wake_ctx = cc.egui_ctx.clone();
-        tray_icon::menu::MenuEvent::set_event_handler(Some(move |event| {
-            let _ = menu_tx.send(event);
-            menu_wake_ctx.request_repaint();
-        }));
+            let menu_wake_ctx = cc.egui_ctx.clone();
+            tray_icon::menu::MenuEvent::set_event_handler(Some(move |event| {
+                let _ = menu_tx.send(event);
+                menu_wake_ctx.request_repaint();
+            }));
+        }
 
         Self {
             screen,
@@ -190,10 +219,11 @@ impl App {
             report_saved: None,
             report_clipboard_at: None,
             frames: 0,
-            tray: tray::create_tray(),
+            tray: if supervised { None } else { tray::create_tray() },
             tray_rx,
             menu_rx,
             should_exit: false,
+            supervised,
             log_expanded: false,
         }
     }
@@ -471,7 +501,11 @@ impl eframe::App for App {
         }
 
         if ui.input(|i| i.viewport().close_requested()) {
-            if self.tray.is_some() && !self.should_exit {
+            // Hiding instead of closing is for the one process that owns the
+            // tray. A window that only hides also answers "no" to the session
+            // manager's close request at logout or shutdown, and the desktop
+            // then waits out its timeout for a window the user cannot see.
+            if self.tray.is_some() && !self.should_exit && !self.supervised {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
@@ -595,6 +629,38 @@ fn without_source_location(msg: &str) -> &str {
     msg.find(".rs:")
         .and_then(|i| msg[i..].find(": ").map(|j| &msg[i + j + 2..]))
         .unwrap_or(msg)
+}
+
+/// Talks to the resident process over this one's stdin, which is a pipe to it.
+///
+/// A line `focus` is the tray asking for the window it already has open. The end
+/// of the pipe means the resident process is gone — nothing is left to bring the
+/// window back once it is closed, so it closes itself rather than linger with no
+/// way to reach it.
+fn watch_parent(ctx: egui::Context) {
+    let _ = std::thread::Builder::new()
+        .name("supervisor-pipe".to_string())
+        .spawn(move || {
+            use std::io::BufRead;
+            for line in std::io::stdin().lock().lines() {
+                match line {
+                    Ok(l) if l.trim() == "focus" => {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                        ctx.request_repaint();
+                    }
+                    Ok(_) => {}
+                    Err(_) => break,
+                }
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            ctx.request_repaint();
+            // The window may not be drawing at all (minimized, or never shown);
+            // a close that nobody is awake to process is not a close.
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            std::process::exit(0);
+        });
 }
 
 fn first_screen() -> Screen {

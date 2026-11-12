@@ -169,8 +169,10 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
                 {
                     copy = true;
                 }
-                let has_tray = app.tray.is_some();
-                let tray_hover = if has_tray {
+                let has_tray = app.tray.is_some() || app.supervised;
+                let tray_hover = if app.supervised {
+                    "Закрыть окно: программа останется в системном трее, обход продолжит работать в фоне"
+                } else if has_tray {
                     "Скрыть окно в системный трей (обход продолжит работать в фоне)"
                 } else {
                     "Системный трей недоступен (окно будет свёрнуто)"
@@ -180,7 +182,11 @@ fn status_card(app: &mut App, ui: &mut egui::Ui) {
                     .on_hover_text(tray_hover)
                     .clicked()
                 {
-                    if has_tray {
+                    if app.supervised {
+                        // The tray is the resident process's; this window is
+                        // the part that goes away, and takes the GPU with it.
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                    } else if has_tray {
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
                     } else {
